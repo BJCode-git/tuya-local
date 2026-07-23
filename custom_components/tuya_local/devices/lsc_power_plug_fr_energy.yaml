@@ -1,0 +1,226 @@
+# =============================================================================
+# tuya-local — config device custom
+# LSC Power Plug FR incl. Power meter  (product_id b61eihfqeaexn54g)
+#
+# Calqué sur le config officiel smartplugv2_energyv2.yaml, avec :
+#   - le bloc products renseigné pour la prise LSC
+#   - le DP 17 (énergie) typé energy + total_increasing (au lieu de
+#     measurement/hidden) => sélectionnable dans le tableau Énergie, sans erreur
+#   - les entités Refresh + Online (DP 66) SUPPRIMÉES : ce modèle LSC n'a pas
+#     de DP 66 => plus de warning "binary_sensor_online deprecated", plus
+#     d'entités indisponibles. Le rafraîchissement passe par force: true.
+#
+# PLACEMENT :
+#   custom_components/tuya_local/devices/lsc_power_plug_fr_energy.yaml
+#   (dossier écrasé à chaque update HACS — voir note en fin de conversation)
+#
+# Le product_id (b61eihfqeaexn54g) fait passer ce config devant le
+# smartplugv2_energyv2 générique (match par id > match par DPS seuls).
+# =============================================================================
+
+name: LSC energy monitoring smartplug
+
+products:
+  - id: keykmm3rjyqy5r8p
+    manufacturer: LSC
+    model: LSC Power Plug FR incl. Power meter
+    model_id: "5225000301"
+
+entities:
+
+  # --- DP 1 : interrupteur (primaire) + DP 21 test / DP 44 inching en attrs -
+  - entity: switch
+    class: outlet
+    dps:
+      - id: 1
+        type: boolean
+        name: switch
+      - id: 21
+        type: integer
+        name: test_bit
+        optional: true
+      - id: 44
+        type: string
+        name: inching
+        optional: true
+
+  # --- DP 9 : minuterie + DP 42/43 (cycle / aléatoire) en attributs --------
+  - entity: time
+    category: config
+    translation_key: timer
+    dps:
+      - id: 9
+        type: integer
+        name: second
+        range:
+          min: 0
+          max: 86400
+      - id: 42
+        type: string
+        name: cycle_timer
+        optional: true
+      - id: 43
+        type: string
+        name: random_timer
+        optional: true
+
+  # --- DP 17 : énergie (add_ele) + coef DP 25 ------------------------------
+  # SEULE déviation vs officiel : energy + total_increasing, non masqué.
+  # /!\ add_ele est peu fiable sur ces prises. Pour une conso dashboard JUSTE,
+  #     alimente le tableau avec le capteur Riemann dérivé de la puissance ;
+  #     garde celui-ci en simple référence.
+  - entity: sensor
+    name: Energy
+    class: energy
+    category: diagnostic
+    dps:
+      - id: 17
+        name: sensor
+        type: integer
+        optional: true
+        unit: Wh
+        class: total_increasing
+      - id: 25
+        type: integer
+        name: calibration
+        optional: true
+
+  # --- DP 18 : courant + coef DP 23 ----------------------------------------
+  - entity: sensor
+    category: diagnostic
+    class: current
+    dps:
+      - id: 18
+        name: sensor
+        type: integer
+        class: measurement
+        force: true
+        unit: mA
+      - id: 23
+        type: integer
+        name: calibration
+        optional: true
+
+  # --- DP 19 : puissance (scale 1 -> /10) + coef DP 24 ---------------------
+  - entity: sensor
+    category: diagnostic
+    class: power
+    dps:
+      - id: 19
+        name: sensor
+        type: integer
+        class: measurement
+        force: true
+        unit: W
+        mapping:
+          - scale: 10
+      - id: 24
+        type: integer
+        name: calibration
+        optional: true
+
+  # --- DP 20 : tension (scale 1 -> /10) + coef DP 22 -----------------------
+  - entity: sensor
+    category: diagnostic
+    class: voltage
+    dps:
+      - id: 20
+        name: sensor
+        type: integer
+        class: measurement
+        force: true
+        unit: V
+        mapping:
+          - scale: 10
+      - id: 22
+        type: integer
+        name: calibration
+        optional: true
+
+  # --- DP 26 : défaut (bitfield -> problème) + code brut en attribut -------
+  - entity: binary_sensor
+    class: problem
+    category: diagnostic
+    dps:
+      - id: 26
+        type: bitfield
+        name: sensor
+        mapping:
+          - dps_val: 0
+            value: false
+          - value: true
+      - id: 26
+        type: bitfield
+        name: fault_code
+
+  # --- DP 38 : état à la mise sous tension ---------------------------------
+  - entity: select
+    category: config
+    translation_key: initial_state
+    dps:
+      - id: 38
+        type: string
+        name: option
+        mapping:
+          - dps_val: "on"
+            value: "on"
+          - dps_val: "off"
+            value: "off"
+          - dps_val: memory
+            value: memory
+
+  # --- DP 39 : protection surcharge (pattern available) --------------------
+  - entity: switch
+    name: Overcharge protection
+    category: config
+    hidden: unavailable
+    dps:
+      - id: 39
+        type: boolean
+        optional: true
+        name: available
+        mapping:
+          - dps_val: null
+            value: false
+          - value: true
+      - id: 39
+        type: boolean
+        name: switch
+        optional: true
+
+  # --- DP 41 : verrou enfant -----------------------------------------------
+  - entity: lock
+    translation_key: child_lock
+    category: config
+    dps:
+      - id: 41
+        type: boolean
+        name: lock
+
+  # --- DP 40 : mode voyant LED (pattern available) -------------------------
+  - entity: select
+    translation_key: light_mode
+    category: config
+    hidden: unavailable
+    dps:
+      - id: 40
+        type: string
+        optional: true
+        name: available
+        mapping:
+          - dps_val: null
+            value: false
+          - value: true
+      - id: 40
+        type: string
+        name: option
+        optional: true
+        mapping:
+          - dps_val: relay
+            value: state
+          - dps_val: pos
+            value: locator
+          - dps_val: none
+            value: "off"
+          - dps_val: "on"
+            value: "on"

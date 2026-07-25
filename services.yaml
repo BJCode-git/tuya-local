@@ -1,0 +1,243 @@
+send_learned_ir_command:
+  target:
+    entity:
+      domain: remote
+      integration: tuya_local
+  fields:
+    command:
+      required: true
+      example: "Play"
+      selector:
+        object:
+    device:
+      example: "TV"
+      selector:
+        text:
+    emitter_entity_id:
+      example: "infrared.my_ir_emitter"
+      required: true
+      selector:
+        entity:
+          filter:
+            domain: infrared
+
+# >>> tuya-local map extension >>>
+# Services de carte du robot aspirateur.
+# LOCAL (dp 15, aucun cloud) : set_no_go_zones, set_virtual_walls, clean_zones,
+#                              clean_rooms, go_to_point, save_map
+# CLOUD : list_maps, select_map, rename_map, delete_map, use_map, refresh_map
+# Le champ device_id est l'identifiant du robot dans tuya_local.
+
+set_no_go_zones:
+  name: Zones interdites
+  description: >
+    Pose une ou plusieurs zones interdites (禁区). 100% local, dp 15.
+    Sans forbid_type, format V1 ; avec, format V2 (sweep/mop séparés).
+  fields:
+    device_id: &device_id
+      name: Device ID
+      description: >
+        Facultatif s'il n'y a qu'un seul robot configuré.
+      required: false
+      example: bf7247a43acf48d2eaol0u
+      selector:
+        text:
+    zones:
+      name: Zones
+      description: Liste de zones, chacune = 4 points [x, y] en pixels carte.
+      required: true
+      example: "[[[10,10],[30,10],[30,30],[10,30]]]"
+      selector:
+        object:
+    forbid_type:
+      name: Type d'interdit
+      description: Format V2 uniquement. all / sweep / mop.
+      selector:
+        select:
+          options: [all, sweep, mop]
+    origin_x: &origin_x
+      name: Origine X
+      description: Déduite de la carte si absente.
+      selector:
+        number:
+          mode: box
+          min: -10000
+          max: 10000
+          step: 0.1
+    origin_y: &origin_y
+      name: Origine Y
+      description: Déduite de la carte si absente.
+      selector:
+        number:
+          mode: box
+          min: -10000
+          max: 10000
+          step: 0.1
+
+set_virtual_walls:
+  name: Murs virtuels
+  description: Pose des murs virtuels (虚拟墙). 100% local, dp 15.
+  fields:
+    device_id: *device_id
+    walls:
+      name: Murs
+      description: Liste de murs, chacun = 2 points [x, y].
+      required: true
+      example: "[[[0,0],[50,0]]]"
+      selector:
+        object:
+    origin_x: *origin_x
+    origin_y: *origin_y
+
+clean_zones:
+  name: Nettoyer des zones
+  description: Nettoyage de zones dessinées (划区清扫). 100% local.
+  fields:
+    device_id: *device_id
+    zones:
+      name: Zones
+      description: Liste de zones, chacune = 4 points [x, y].
+      required: true
+      example: "[[[10,10],[30,10],[30,30],[10,30]]]"
+      selector:
+        object:
+    passes:
+      name: Passages
+      description: Nombre de passages (active le format V2).
+      selector:
+        number:
+          min: 1
+          max: 3
+
+clean_rooms:
+  name: Nettoyer des pièces
+  description: Nettoyage par pièce (trame 0x14). 100% local.
+  fields:
+    device_id: *device_id
+    room_ids:
+      name: IDs de pièces
+      description: Identifiants issus des attributs de l'entité caméra.
+      required: true
+      example: "[3]"
+      selector:
+        object:
+    passes:
+      name: Passages
+      selector:
+        number:
+          min: 1
+          max: 3
+
+go_to_point:
+  name: Aller à un point
+  description: Envoie le robot à un point (指哪扫哪). 100% local.
+  fields:
+    device_id: *device_id
+    point:
+      name: Point
+      description: "[x, y] en pixels carte."
+      required: true
+      example: "[40, 60]"
+      selector:
+        object:
+    origin_x: *origin_x
+    origin_y: *origin_y
+
+save_map:
+  name: Enregistrer la carte
+  description: >
+    Enregistre la carte courante comme carte multi-étages (trame 0x2a).
+    100% local. C'est le robot qui la téléverse ensuite.
+  fields:
+    device_id: *device_id
+
+use_map:
+  name: Basculer le robot sur une carte
+  description: >
+    Fait charger au ROBOT une carte enregistrée (trame 0x2e). L'URL du fichier
+    est récupérée via le cloud, le robot la télécharge lui-même.
+    À distinguer de select_map, qui ne change que l'affichage.
+  fields:
+    device_id: *device_id
+    map_id:
+      name: ID de la carte
+      required: true
+      example: 14272580
+      selector:
+        number:
+          mode: box
+          min: 1
+          max: 999999999999
+
+list_maps:
+  name: Lister les cartes
+  description: Liste les cartes enregistrées (cloud). Renvoie une réponse.
+  fields:
+    device_id: *device_id
+
+select_map:
+  name: Afficher une carte
+  description: >
+    Choisit la carte AFFICHÉE par l'entité caméra. Sans map_id ni name,
+    retour à la carte courante.
+  fields:
+    device_id: *device_id
+    map_id:
+      name: ID de la carte
+      selector:
+        number:
+          mode: box
+          min: 1
+          max: 999999999999
+    name:
+      name: Nom de la carte
+      description: Alternative à l'ID.
+      selector:
+        text:
+
+rename_map:
+  name: Renommer une carte
+  description: Renomme une carte via le Sweeping Robot Open Service (cloud).
+  fields:
+    device_id: *device_id
+    map_id:
+      name: ID de la carte
+      required: true
+      selector:
+        number:
+          mode: box
+          min: 1
+          max: 999999999999
+    name:
+      name: Nouveau nom
+      required: true
+      example: Rez-de-chaussée
+      selector:
+        text:
+
+delete_map:
+  name: Supprimer des cartes
+  description: Supprime des cartes (cloud). Irréversible.
+  fields:
+    device_id: *device_id
+    map_ids:
+      name: IDs des cartes
+      required: true
+      example: "[14272580]"
+      selector:
+        object:
+
+refresh_map:
+  name: Actualiser la carte
+  description: >
+    Redemande la carte au robot (dp 16 = get_both) puis la retélécharge.
+    N'efface rien.
+  fields:
+    device_id: *device_id
+    ask_device:
+      name: Solliciter le robot
+      description: Décocher pour se contenter de retélécharger.
+      default: true
+      selector:
+        boolean:
+# <<< tuya-local map extension <<<
